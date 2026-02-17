@@ -10,6 +10,13 @@ import java.util.List;
 import java.io.*;
 import java.net.URL;
 
+import java.net.HttpURLConnection;
+import java.io.OutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
+
+
 
 public class ElPaisTest extends BaseTest {
 
@@ -60,6 +67,10 @@ public class ElPaisTest extends BaseTest {
 
                 System.out.println("\n------ ARTICLE " + (i + 1) + " ------");
                 System.out.println("Title (Spanish): " + title);
+
+                String englishTitle = translateToEnglish(title);
+                System.out.println("Title (English): " + englishTitle);
+
 
                 // Click article
                 titleLink.click();
@@ -120,6 +131,7 @@ public class ElPaisTest extends BaseTest {
                 wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
             }
         }
+
     }
 
     private void handleCookies() {
@@ -164,6 +176,58 @@ public class ElPaisTest extends BaseTest {
             System.out.println("Failed to download image: " + fileName);
         }
     }
+
+    private String translateToEnglish(String text) {
+
+        String apiKey = "";
+        String apiHost = "rapid-translate-multi-traduction.p.rapidapi.com";
+
+        try {
+
+            URL url = new URL("https://rapid-translate-multi-traduction.p.rapidapi.com/t");
+
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("X-RapidAPI-Key", apiKey);
+            conn.setRequestProperty("X-RapidAPI-Host", apiHost);
+
+            conn.setDoOutput(true);
+
+            String jsonInput = "{"
+                    + "\"from\": \"es\","
+                    + "\"to\": \"en\","
+                    + "\"q\": \"" + text + "\""
+                    + "}";
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(jsonInput.getBytes("utf-8"));
+            }
+
+            BufferedReader br = new BufferedReader(
+                    new InputStreamReader(conn.getInputStream(), "utf-8")
+            );
+
+            StringBuilder response = new StringBuilder();
+            String line;
+
+            while ((line = br.readLine()) != null) {
+                response.append(line.trim());
+            }
+
+            br.close();
+
+            // Response comes as array: ["Translated Text"]
+            String result = response.toString();
+            return result.replace("[\"", "").replace("\"]", "");
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return text;
+        }
+    }
+
 
 
     @AfterClass
