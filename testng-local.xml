@@ -1,0 +1,16 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="ElPaisLocalSuite">
+
+    <test name="Chrome_Local">
+        <parameter name="browser" value="chrome"/>
+        <parameter name="browserVersion" value=""/>
+        <parameter name="os" value=""/>
+        <parameter name="osVersion" value=""/>
+        <parameter name="deviceName" value=""/>
+        <parameter name="runLocal" value="true"/>
+        <classes>
+            <class name="com.browserstack.elpais_assignment.tests.ElPaisTest"/>
+        </classes>
+    </test>
+
+</suite>

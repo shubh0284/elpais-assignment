@@ -13,6 +13,7 @@ import java.net.HttpURLConnection;
 import java.io.OutputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import io.github.cdimascio.dotenv.Dotenv;
 
 public class ElPaisTest extends BaseTest {
 
@@ -20,32 +21,37 @@ public class ElPaisTest extends BaseTest {
     StringBuilder allTranslatedTitles = new StringBuilder();
 
     @BeforeClass
-    public void start() {
-        setup();
-        wait = new WebDriverWait(driver, Duration.ofSeconds(15));
+    @Parameters({"browser", "browserVersion", "os", "osVersion", "deviceName", "runLocal"})
+    public void start(String browser, String browserVersion, String os, String osVersion, String deviceName, String runLocal) throws Exception {
+        setup(browser, browserVersion, os, osVersion, deviceName, runLocal);
+        wait = new WebDriverWait(getDriver(), Duration.ofSeconds(20));
     }
 
     @Test
     public void scrapeOpinionArticles() {
 
-        driver.get("https://elpais.com/opinion/");
-        wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("body")));
+        getDriver().get("https://elpais.com/opinion/");
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("body")));
 
         handleCookies();
-        wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("article")));
 
         for (int i = 0; i < 5; i++) {
 
             try {
-                List<WebElement> articles = driver.findElements(By.cssSelector("article"));
+
+                // Re-fetch articles every loop (fix stale element)
+                List<WebElement> articles =
+                        wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(
+                                By.cssSelector("article")));
 
                 if (articles.size() <= i) {
                     System.out.println("Less than 5 articles available.");
                     break;
                 }
 
-                WebElement article = articles.get(i);
-                WebElement titleLink = article.findElement(By.cssSelector("h2 a"));
+                WebElement titleLink =
+                        articles.get(i).findElement(By.cssSelector("h2 a"));
 
                 String title = titleLink.getText().trim();
                 if (title.isEmpty()) continue;
@@ -58,20 +64,30 @@ public class ElPaisTest extends BaseTest {
 
                 allTranslatedTitles.append(englishTitle).append(" ");
 
-                titleLink.click();
-                wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
+                //  Only JS click (removed double click)
+                ((JavascriptExecutor) getDriver())
+                        .executeScript("arguments[0].click();", titleLink);
+
+                wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("article")));
 
                 downloadArticleImage(i);
                 extractArticleContent();
 
-                driver.get("https://elpais.com/opinion/");
-                wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
+                getDriver().navigate().back();
+                wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("article")));
+
+            } catch (StaleElementReferenceException e) {
+
+                System.out.println("Retrying article " + (i + 1) + " due to stale element.");
+                i--; // retry same article
 
             } catch (Exception e) {
+
                 System.out.println("Error processing article " + (i + 1));
                 e.printStackTrace();
-                driver.get("https://elpais.com/opinion/");
-                wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
+
+                getDriver().get("https://elpais.com/opinion/");
+                wait.until(ExpectedConditions.presenceOfElementLocated(By.cssSelector("article")));
             }
         }
 
@@ -99,14 +115,18 @@ public class ElPaisTest extends BaseTest {
     private void downloadArticleImage(int index) {
         try {
 
-            List<WebElement> images = driver.findElements(By.cssSelector("article img"));
+            List<WebElement> images =
+                    wait.until(ExpectedConditions.presenceOfAllElementsLocatedBy(
+                            By.cssSelector("article img")));
 
-            if (images.size() > 0) {
+            if (!images.isEmpty()) {
+
                 String imageUrl = images.get(0).getAttribute("src");
 
                 if (imageUrl != null && !imageUrl.isEmpty()) {
                     downloadImage(imageUrl, "article_" + (index + 1) + ".jpg");
                 }
+
             } else {
                 System.out.println("No image found for article " + (index + 1));
             }
@@ -118,6 +138,7 @@ public class ElPaisTest extends BaseTest {
 
     private void downloadImage(String imageUrl, String fileName) {
         try {
+
             URL url = new URL(imageUrl);
             InputStream in = url.openStream();
 
@@ -151,15 +172,15 @@ public class ElPaisTest extends BaseTest {
 
             wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("body")));
 
-            List<WebElement> paragraphs = driver.findElements(By.xpath("//article//p"));
+            List<WebElement> paragraphs =
+                    getDriver().findElements(By.xpath("//article//p"));
 
-            if (paragraphs.size() == 0) {
-                paragraphs = driver.findElements(
-                        By.xpath("//div[contains(@class,'article')]//p")
-                );
+            if (paragraphs.isEmpty()) {
+                paragraphs =
+                        getDriver().findElements(By.xpath("//div[contains(@class,'article')]//p"));
             }
 
-            if (paragraphs.size() == 0) {
+            if (paragraphs.isEmpty()) {
                 System.out.println("No paragraphs found.");
                 return;
             }
@@ -182,7 +203,6 @@ public class ElPaisTest extends BaseTest {
 
         } catch (Exception e) {
             System.out.println("Error extracting article content.");
-            e.printStackTrace();
         }
     }
 
@@ -190,9 +210,8 @@ public class ElPaisTest extends BaseTest {
 
     private String translateToEnglish(String text) {
 
-        String apiKey = "";
-        String apiHost = "";
-
+        String apiKey = "82e6d33884mshfc8fd22b76ebe2ep15b294jsn245efa32c846";
+        String apiHost = "rapid-translate-multi-traduction.p.rapidapi.com";
         try {
 
             URL url = new URL("https://rapid-translate-multi-traduction.p.rapidapi.com/t");
@@ -209,7 +228,7 @@ public class ElPaisTest extends BaseTest {
             String jsonInput = "{"
                     + "\"from\": \"es\","
                     + "\"to\": \"en\","
-                    + "\"q\": [\"" + text + "\"]"
+                    + "\"q\": [\"" + text.replace("\"", "\\\"") + "\"]"
                     + "}";
 
             try (OutputStream os = conn.getOutputStream()) {
