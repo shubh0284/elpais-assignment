@@ -6,21 +6,18 @@ import org.openqa.selenium.support.ui.*;
 import org.testng.annotations.*;
 
 import java.time.Duration;
-import java.util.List;
+import java.util.*;
 import java.io.*;
 import java.net.URL;
-
 import java.net.HttpURLConnection;
 import java.io.OutputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
-
-
-
 public class ElPaisTest extends BaseTest {
 
     WebDriverWait wait;
+    StringBuilder allTranslatedTitles = new StringBuilder();
 
     @BeforeClass
     public void start() {
@@ -32,21 +29,14 @@ public class ElPaisTest extends BaseTest {
     public void scrapeOpinionArticles() {
 
         driver.get("https://elpais.com/opinion/");
-
-        // Wait for body
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("body")));
 
-        // Accept cookies if present
         handleCookies();
-
-        // Wait for articles
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
 
         for (int i = 0; i < 5; i++) {
 
             try {
-
-                // Re-fetch articles every loop to avoid stale reference
                 List<WebElement> articles = driver.findElements(By.cssSelector("article"));
 
                 if (articles.size() <= i) {
@@ -55,15 +45,10 @@ public class ElPaisTest extends BaseTest {
                 }
 
                 WebElement article = articles.get(i);
-
-                // Get title link (more reliable than just h2)
                 WebElement titleLink = article.findElement(By.cssSelector("h2 a"));
-                String title = titleLink.getText().trim();
 
-                if (title.isEmpty()) {
-                    System.out.println("Skipping article " + (i + 1) + " (empty title)");
-                    continue;
-                }
+                String title = titleLink.getText().trim();
+                if (title.isEmpty()) continue;
 
                 System.out.println("\n------ ARTICLE " + (i + 1) + " ------");
                 System.out.println("Title (Spanish): " + title);
@@ -71,68 +56,29 @@ public class ElPaisTest extends BaseTest {
                 String englishTitle = translateToEnglish(title);
                 System.out.println("Title (English): " + englishTitle);
 
+                allTranslatedTitles.append(englishTitle).append(" ");
 
-                // Click article
                 titleLink.click();
-
-                // Wait for article content to load
                 wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
 
-                // Get cover image
-                try {
-                    WebElement imageElement = driver.findElement(By.cssSelector("article img"));
-                    String imageUrl = imageElement.getAttribute("src");
+                downloadArticleImage(i);
+                extractArticleContent();
 
-                    if (imageUrl != null && !imageUrl.isEmpty()) {
-                        downloadImage(imageUrl, "article_" + (i + 1) + ".jpg");
-                    } else {
-                        System.out.println("No image found for article " + (i + 1));
-                    }
-
-                } catch (Exception e) {
-                    System.out.println("Image not available for article " + (i + 1));
-                }
-
-
-                // Try main content selector first
-                List<WebElement> paragraphs = driver.findElements(
-                        By.cssSelector("article p")
-                );
-
-                if (paragraphs.isEmpty()) {
-                    System.out.println("No paragraphs found.");
-                } else {
-
-                    System.out.println("Content Preview:");
-
-                    int printed = 0;
-
-                    for (WebElement para : paragraphs) {
-
-                        String text = para.getText().trim();
-
-                        if (!text.isEmpty()) {
-                            System.out.println(text);
-                            printed++;
-                        }
-
-                        if (printed == 5) break;
-                    }
-                }
-
-                // Go back
-                driver.navigate().back();
-
+                driver.get("https://elpais.com/opinion/");
                 wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
 
             } catch (Exception e) {
                 System.out.println("Error processing article " + (i + 1));
-                driver.navigate().back();
+                e.printStackTrace();
+                driver.get("https://elpais.com/opinion/");
                 wait.until(ExpectedConditions.visibilityOfElementLocated(By.tagName("article")));
             }
         }
 
+        analyzeTranslatedHeaders(allTranslatedTitles.toString());
     }
+
+    // ================= COOKIES =================
 
     private void handleCookies() {
         try {
@@ -148,15 +94,35 @@ public class ElPaisTest extends BaseTest {
         }
     }
 
+    // ================= IMAGE DOWNLOAD =================
+
+    private void downloadArticleImage(int index) {
+        try {
+
+            List<WebElement> images = driver.findElements(By.cssSelector("article img"));
+
+            if (images.size() > 0) {
+                String imageUrl = images.get(0).getAttribute("src");
+
+                if (imageUrl != null && !imageUrl.isEmpty()) {
+                    downloadImage(imageUrl, "article_" + (index + 1) + ".jpg");
+                }
+            } else {
+                System.out.println("No image found for article " + (index + 1));
+            }
+
+        } catch (Exception e) {
+            System.out.println("Image not available for article " + (index + 1));
+        }
+    }
+
     private void downloadImage(String imageUrl, String fileName) {
         try {
             URL url = new URL(imageUrl);
             InputStream in = url.openStream();
 
             File directory = new File("images");
-            if (!directory.exists()) {
-                directory.mkdir();
-            }
+            if (!directory.exists()) directory.mkdir();
 
             FileOutputStream out = new FileOutputStream("images/" + fileName);
 
@@ -177,10 +143,55 @@ public class ElPaisTest extends BaseTest {
         }
     }
 
+    // ================= CONTENT EXTRACTION =================
+
+    private void extractArticleContent() {
+
+        try {
+
+            wait.until(ExpectedConditions.presenceOfElementLocated(By.tagName("body")));
+
+            List<WebElement> paragraphs = driver.findElements(By.xpath("//article//p"));
+
+            if (paragraphs.size() == 0) {
+                paragraphs = driver.findElements(
+                        By.xpath("//div[contains(@class,'article')]//p")
+                );
+            }
+
+            if (paragraphs.size() == 0) {
+                System.out.println("No paragraphs found.");
+                return;
+            }
+
+            System.out.println("Content Preview:");
+
+            int count = 0;
+
+            for (WebElement para : paragraphs) {
+
+                String text = para.getText().trim();
+
+                if (!text.isEmpty()) {
+                    System.out.println(text);
+                    count++;
+                }
+
+                if (count == 5) break;
+            }
+
+        } catch (Exception e) {
+            System.out.println("Error extracting article content.");
+            e.printStackTrace();
+        }
+    }
+
+    // ================= TRANSLATION =================
+
     private String translateToEnglish(String text) {
 
         String apiKey = "";
-        String apiHost = "rapid-translate-multi-traduction.p.rapidapi.com";
+        String apiHost = "";
 
         try {
 
@@ -198,7 +209,7 @@ public class ElPaisTest extends BaseTest {
             String jsonInput = "{"
                     + "\"from\": \"es\","
                     + "\"to\": \"en\","
-                    + "\"q\": \"" + text + "\""
+                    + "\"q\": [\"" + text + "\"]"
                     + "}";
 
             try (OutputStream os = conn.getOutputStream()) {
@@ -218,17 +229,45 @@ public class ElPaisTest extends BaseTest {
 
             br.close();
 
-            // Response comes as array: ["Translated Text"]
             String result = response.toString();
             return result.replace("[\"", "").replace("\"]", "");
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Translation failed.");
             return text;
         }
     }
 
+    // ================= WORD FREQUENCY =================
 
+    private void analyzeTranslatedHeaders(String text) {
+
+        System.out.println("\n------ TRANSLATED HEADER ANALYSIS ------");
+
+        text = text.toLowerCase().replaceAll("[^a-zA-Z ]", "");
+        String[] words = text.split("\\s+");
+
+        Map<String, Integer> wordCount = new HashMap<>();
+
+        for (String word : words) {
+            if (word.length() > 2) {
+                wordCount.put(word, wordCount.getOrDefault(word, 0) + 1);
+            }
+        }
+
+        boolean found = false;
+
+        for (Map.Entry<String, Integer> entry : wordCount.entrySet()) {
+            if (entry.getValue() > 2) {
+                System.out.println(entry.getKey() + " : " + entry.getValue());
+                found = true;
+            }
+        }
+
+        if (!found) {
+            System.out.println("No words repeated more than twice.");
+        }
+    }
 
     @AfterClass
     public void close() {
