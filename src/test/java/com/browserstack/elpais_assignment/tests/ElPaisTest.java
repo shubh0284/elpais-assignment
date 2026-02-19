@@ -210,7 +210,7 @@ public class ElPaisTest extends BaseTest {
 
     private String translateToEnglish(String text) {
 
-        String apiKey = "82e6d33884mshfc8fd22b76ebe2ep15b294jsn245efa32c846";
+        String apiKey = "298e9fdb66msh579519faebd9b1ap1e6afbjsn6b0ad64526c3";
         String apiHost = "rapid-translate-multi-traduction.p.rapidapi.com";
         try {
 

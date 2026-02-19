@@ -1,5 +1,5 @@
 <!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
-<suite name="ElPaisBrowserStackSuite" parallel="tests" thread-count="5">
+<suite name="ElPaisBrowserStackSuite" parallel="tests" thread-count="1">
 
     <test name="Chrome_Windows">
         <parameter name="browser" value="chrome"/>
